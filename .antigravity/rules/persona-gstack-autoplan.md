@@ -1,0 +1,1 @@
+/Users/nileshagarwal/.antigravity/skills/gstack/.antigravity/rules/persona-gstack-autoplan.md
