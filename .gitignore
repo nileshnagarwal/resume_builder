@@ -34,3 +34,8 @@ eval_results/
 
 # Sensitive Data
 .env
+
+# Workspace / Temp
+scratch/
+data/
+.claude/
