@@ -22,25 +22,50 @@ any questions. Instead, use only the Priority Map and Master Resume provided \
 below.
 
 Rules for this automated run:
-1. Use ONLY content from the master resume. Do not fabricate or assume.
-2. Follow the priority map to decide which bullets to include and where.
-3. If the Priority Map provides an optimized role title for a past job, \
+
+1. ANTI-HALLUCINATION — HIGHEST PRIORITY: Every claim in every section — \
+   Summary, Core Competencies, Experience, Skills, and any other — must be \
+   directly traceable to specific content in the master resume. Do NOT invent \
+   capabilities, activities, or experiences. This includes the Summary and \
+   Core Competencies sections.
+
+   KEYWORD INJECTION PROHIBITION: The Priority Map and JD keywords are for \
+   ALIGNMENT guidance, not for content insertion. Never insert a JD keyword \
+   into the resume as a capability claim unless the master resume explicitly \
+   documents that specific activity. If a keyword represents a skill the \
+   candidate does not have, LEAVE IT OUT — do not fabricate that experience.
+
+   NEGATIVE EXAMPLES (DO NOT DO THIS):
+   - Master resume says "Interested in healthcare roles" → DO NOT write \
+     "Experienced in healthcare." Interest ≠ experience.
+   - Master resume documents no public speaking → DO NOT write "skilled \
+     public speaker" because the JD mentions it.
+   - JD says "CPA required" and master resume has no CPA → DO NOT write \
+     "accounting expertise" to paper over the gap.
+
+   If the Priority Map includes bullets for a requirement but those bullets \
+   do not actually demonstrate that requirement, do NOT claim the capability. \
+   Use only what the bullets genuinely evidence.
+
+2. COMBINATION DIRECTIVES ARE MANDATORY: If the Priority Map includes a \
+   combination_directive for a requirement, it is a hard instruction — not a \
+   suggestion. You MUST follow it and include all referenced bullets in \
+   combined or adjacent form.
+
+3. Follow the priority map to decide which bullets to include and where.
+
+4. If the Priority Map provides an optimized role title for a past job, \
    you MUST use the optimized title instead of the original title from \
    the Master Resume.
-4. Format the resume in clean Markdown.
-5. Summary: {summary_min}-{summary_max} bullet points.
-6. Most recent role: {recent_min}-{recent_max} bullet points.
-7. Past roles: {past_min}-{past_max} bullet points each.
-8. Use present tense for current role, past tense for previous roles.
-9. Follow the Tone & Language Guide: no hero language, plain English, \
-   strong action verbs.
-10. Output ONLY the resume in Markdown — no commentary, no explanations.
-11. ANTI-HALLUCINATION (ALL SECTIONS): Every claim in every section — \
-    Summary, Core Competencies, Experience, and any other — must be \
-    traceable to specific content in the master resume. Do NOT invent \
-    capabilities, activities, or experiences not documented in the master \
-    resume. This includes the Summary section: do not claim "remote work \
-    experience" unless the master resume explicitly describes remote work.
+
+5. Format the resume in clean Markdown.
+6. Summary: {summary_min}-{summary_max} bullet points.
+7. Most recent role: {recent_min}-{recent_max} bullet points.
+8. Past roles: {past_min}-{past_max} bullet points each.
+9. Use present tense for current role, past tense for previous roles.
+10. Follow the Tone & Language Guide: no hero language, plain English, \
+    strong action verbs.
+11. Output ONLY the resume in Markdown — no commentary, no explanations.
 12. CORE COMPETENCIES: Each competency line must be a compressed summary \
     of verifiable activities from the Priority Map — not invented \
     capability claims. Do NOT add claims about tools, skills, or \
@@ -59,6 +84,7 @@ Rules for this automated run:
     to "transparent stakeholder management." If the master resume says \
     it plainly, keep it plain.
 """
+
 
 
 

@@ -31,6 +31,12 @@ Examples:
         action="store_true",
         help="Re-ingest the master resume into the vector DB before running",
     )
+    parser.add_argument(
+        "--master-resume",
+        action="store",
+        type=Path,
+        help="Path to a specific master resume markdown file. If not provided, the latest in master_resumes/ is used.",
+    )
 
     args = parser.parse_args()
 
@@ -50,8 +56,15 @@ Examples:
         print(f"   Ingested {count} chunks")
 
     # Load master resume text
-    master_resume_text = load_master_resume()
-    print(f"📋 Loaded master resume ({len(master_resume_text)} chars)")
+    if args.master_resume:
+        if not args.master_resume.exists():
+            print(f"❌ Master resume file not found: {args.master_resume}")
+            sys.exit(1)
+        master_resume_text = args.master_resume.read_text(encoding="utf-8")
+        print(f"📋 Loaded master resume from {args.master_resume.name} ({len(master_resume_text)} chars)")
+    else:
+        master_resume_text = load_master_resume()
+        print(f"📋 Loaded master resume using default path ({len(master_resume_text)} chars)")
 
     # Build and run pipeline
     print("\n" + "=" * 60)
@@ -73,6 +86,7 @@ Examples:
         "diff_log": [],
         "loop_count": 0,
         "final_resume_md": "",
+        "interactive_mode": True,
     }
 
     final_state = pipeline.invoke(initial_state)

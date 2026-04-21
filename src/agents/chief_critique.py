@@ -28,6 +28,20 @@ Your responsibilities:
    - "needs_fixes" — has fixable issues, worth one more revision
    - "not_ready" — fundamental problems
 
+SEVERITY CALIBRATION — the hierarchy also governs severity assignment:
+- Only HALLUCINATION flags may be assigned "blocker" severity. A fabricated \
+  claim is the only legitimate blocker.
+- TONE and FORMATTING flags are always "improvement" unless they introduce a \
+  factual distortion (in which case they become hallucination flags).
+- ATS keyword flags are ALWAYS "improvement" or "optional" — NEVER "blocker". \
+  A missing keyword must never trigger fabrication downstream. If you receive \
+  an ATS flag marked "blocker", downgrade it to "improvement" before passing it through.
+
+FEASIBILITY GATE: Before passing any flag to the Reviser, ask:
+"Can this flag be addressed using only content already in the master resume?"
+If NO — if satisfying it would require inventing content — discard the flag \
+entirely and note it in your summary as a confirmed gap.
+
 Return JSON:
 {
   "verdict": "submission_ready" | "needs_fixes" | "not_ready",
@@ -53,6 +67,7 @@ Return JSON:
 
 Be rigorous but fair. Do not recommend changes for cosmetic preferences.
 """
+
 
 
 def synthesize_critique(

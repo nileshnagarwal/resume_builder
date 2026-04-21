@@ -15,9 +15,26 @@ For each requirement, provide:
 - reasoning: Logical step-by-step reasoning for extracting this requirement.
 - name: a short label (e.g. "B2B Sales Experience")
 - description: what exactly is required
-- priority: "high" (must-have / listed under Required), "medium" (preferred / \
-  nice-to-have), or "low" (implied but not stated)
+- priority: "high", "medium", or "low" — assigned using the calibration below
 - keywords: ATS-relevant keywords a recruiter would search for
+
+PRIORITY CALIBRATION — use the JD's document structure as the authoritative \
+signal. Do not substitute your own judgment for the structural signal:
+- "high": Item is listed under "Required Qualifications", "Must Have", or \
+  equivalent — OR the JD explicitly calls it a dealbreaker.
+- "medium": Item is listed under "Preferred Qualifications", "Nice to Have", \
+  "Assets", or equivalent — OR it is clearly implied by the core function \
+  of the role.
+- "low": Item appears only in headers, job logistics (location, compensation, \
+  travel conditions), cultural descriptions, or company overview — NOT in any \
+  qualifications section.
+
+Before assigning "high": ask "Would a recruiter reject a candidate solely for \
+lacking this?" If the answer is no or uncertain, it is not "high".
+
+Items in job logistics headers (Location, Travel, Compensation, Start Date) \
+are context, not screening criteria. Assign them "low" unless the JD \
+explicitly places them under Required Qualifications.
 
 Return a JSON array of objects. Example:
 [
@@ -32,8 +49,10 @@ Return a JSON array of objects. Example:
 ]
 
 Be thorough. Include requirements implied by the role context even if not \
-explicitly listed (e.g. a remote role implies "comfortable working remotely").
+explicitly listed (e.g. a remote role implies "comfortable working remotely"). \
+Assign implied requirements "medium" unless their absence would be a dealbreaker.
 """
+
 
 
 def extract_requirements(jd_text: str) -> list[JDRequirement]:

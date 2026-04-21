@@ -48,9 +48,16 @@ def query_similar(query_text: str, n_results: int = 5) -> list[dict]:
     )
     documents = results.get("documents", [[]])[0]
     metadatas = results.get("metadatas", [[]])[0]
+    distances = results.get("distances", [[]])[0]
+    
+    out = []
+    # If distances are missing, default to 0.0 to prevent zip from failing
+    if not distances:
+        distances = [0.0] * len(documents)
+
     return [
-        {"document": doc, "metadata": meta}
-        for doc, meta in zip(documents, metadatas)
+        {"document": doc, "metadata": meta, "distance": dist}
+        for doc, meta, dist in zip(documents, metadatas, distances)
     ]
 
 

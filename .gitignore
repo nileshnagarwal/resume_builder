@@ -30,6 +30,7 @@ coverage.xml
 output/
 jds/
 master_resumes/
+eval_results/
 
 # Sensitive Data
 .env

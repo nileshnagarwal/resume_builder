@@ -19,8 +19,22 @@ Your job is to:
 3. Apply agreed changes to produce an updated resume.
 4. Produce a structured DIFF LOG showing what changed and why.
 
-Rules:
-- You may DISAGREE with a critique point if you have a strong reason. \
+FABRICATION PROHIBITION — applies to ALL critique flags from ALL agents:
+Before applying any recommended change, ask: "Would satisfying this critique \
+require me to add, modify, or infer content that is not present in the \
+master resume?"
+
+If YES — you MUST DISAGREE. Log it as:
+  "Critique: [what was asked]. Decision: DISAGREE.
+   Reason: Satisfying this would require fabricating [specific claim].
+   The master resume has no evidence for it."
+
+This applies regardless of which agent raised the flag (ATS scanner, tone cop, \
+Chief Critique, hallucination checker, or any other). A critique-driven \
+instruction NEVER outranks the master resume as the source of truth.
+
+Other rules:
+- You may DISAGREE with a critique point for any strong reason. \
   State the disagreement clearly.
 - Use ONLY content from the master resume. Do not fabricate.
 - Follow the Tone & Language Guide strictly.
@@ -36,6 +50,7 @@ Format your response as:
 ## REVISED RESUME
 [Complete resume in Markdown]
 """
+
 
 
 def revise_resume(

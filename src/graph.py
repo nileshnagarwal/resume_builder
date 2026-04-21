@@ -1,6 +1,8 @@
 """LangGraph pipeline orchestration for the Resume Builder."""
 
-from typing import Any, Optional, TypedDict
+import copy
+import time
+from typing import Any, Callable, Optional, TypedDict
 
 from langgraph.graph import END, StateGraph
 
@@ -27,6 +29,7 @@ from src.models import (
     Severity,
     SubmissionVerdict,
 )
+from src.eval.scoring import AgentTrace, _safe_serialize
 from src.vector_db import load_master_resume
 
 
@@ -45,6 +48,57 @@ class GraphState(TypedDict, total=False):
     diff_log: list
     loop_count: int
     final_resume_md: str
+    interactive_mode: bool
+    # Tracing keys — only populated when _tracing_enabled is True
+    _tracing_enabled: bool
+    _traces: list
+
+
+# --- Tracing Infrastructure ---
+
+
+def _snapshot_state(state: dict) -> dict:
+    """Create a JSON-safe snapshot of the pipeline state for tracing.
+
+    Excludes internal keys (_tracing_enabled, _traces) to keep traces
+    focused on pipeline data.
+    """
+    return {
+        k: _safe_serialize(v)
+        for k, v in state.items()
+        if not k.startswith("_")
+    }
+
+
+def _traced(node_fn: Callable) -> Callable:
+    """Decorator that emits an AgentTrace when _tracing_enabled is True."""
+    def wrapper(state: dict) -> dict:
+        if not state.get("_tracing_enabled"):
+            return node_fn(state)
+
+        before = _snapshot_state(state)
+        start = time.time()
+        result = node_fn(state)
+        elapsed = time.time() - start
+
+        # Build "after" by merging result into a copy of before
+        after = {**before, **{k: _safe_serialize(v) for k, v in result.items() if not k.startswith("_")}}
+
+        trace = AgentTrace(
+            agent_name=node_fn.__name__.removeprefix("node_"),
+            loop_iteration=state.get("loop_count", 0),
+            state_before=before,
+            state_after=after,
+            elapsed_seconds=elapsed,
+        )
+        traces = state.get("_traces", [])
+        traces.append(trace)
+        result["_traces"] = traces
+
+        return result
+
+    wrapper.__name__ = node_fn.__name__
+    return wrapper
 
 
 # --- Node Functions ---
@@ -84,6 +138,9 @@ def node_check_fit(state: dict) -> dict:
 
 def node_update_context(state: dict) -> dict:
     """Ask user about unmatched requirements and update the master resume DB."""
+    if not state.get("interactive_mode", True):
+        return {}
+
     fit_result = state["fit_result"]
     if not fit_result.unmatched:
         return {}
@@ -169,11 +226,25 @@ def node_draft_resume(state: dict) -> dict:
 def node_run_critique(state: dict) -> dict:
     """Run the critique swarm on the current draft, plus deterministic checks."""
     print(f"\n🔬 [5/8] Running critique swarm (V{state['current_draft'].version})...")
-    flags = run_critique_swarm(
-        state["current_draft"],
-        state["master_resume_text"],
-        state["requirements"],
-    )
+
+    tracing = state.get("_tracing_enabled", False)
+
+    if tracing:
+        flags, sub_traces = run_critique_swarm(
+            state["current_draft"],
+            state["master_resume_text"],
+            state["requirements"],
+            emit_traces=True,
+            loop_iteration=state.get("loop_count", 0),
+        )
+        traces = state.get("_traces", [])
+        traces.extend(sub_traces)
+    else:
+        flags = run_critique_swarm(
+            state["current_draft"],
+            state["master_resume_text"],
+            state["requirements"],
+        )
 
     # Inject programmatic bullet-count violations as blocker flags
     violations = validate_bullet_counts(state["current_draft"].full_text)
@@ -192,7 +263,11 @@ def node_run_critique(state: dict) -> dict:
     blockers = [f for f in flags if f.severity.value == "blocker"]
     improvements = [f for f in flags if f.severity.value == "improvement"]
     print(f"   Found {len(flags)} flags: {len(blockers)} blockers, {len(improvements)} improvements")
-    return {"critique_flags": flags}
+
+    result = {"critique_flags": flags}
+    if tracing:
+        result["_traces"] = traces
+    return result
 
 
 def node_synthesize_critique(state: dict) -> dict:
@@ -270,17 +345,19 @@ def build_pipeline() -> StateGraph:
     """Build and compile the LangGraph pipeline."""
     graph = StateGraph(GraphState)
 
-    # Add nodes
-    graph.add_node("extract_jd", node_extract_jd)
-    graph.add_node("check_fit", node_check_fit)
-    graph.add_node("update_context", node_update_context)
-    graph.add_node("build_strategy", node_build_strategy)
-    graph.add_node("optimize_titles", node_optimize_titles)
-    graph.add_node("draft_resume", node_draft_resume)
+    # Add nodes — wrapped with _traced() for eval observability.
+    # node_run_critique handles its own tracing (sub-agent traces), so it is
+    # NOT wrapped here to avoid double-tracing.
+    graph.add_node("extract_jd", _traced(node_extract_jd))
+    graph.add_node("check_fit", _traced(node_check_fit))
+    graph.add_node("update_context", _traced(node_update_context))
+    graph.add_node("build_strategy", _traced(node_build_strategy))
+    graph.add_node("optimize_titles", _traced(node_optimize_titles))
+    graph.add_node("draft_resume", _traced(node_draft_resume))
     graph.add_node("run_critique", node_run_critique)
-    graph.add_node("synthesize_critique", node_synthesize_critique)
-    graph.add_node("revise", node_revise)
-    graph.add_node("save_outputs", node_save_outputs)
+    graph.add_node("synthesize_critique", _traced(node_synthesize_critique))
+    graph.add_node("revise", _traced(node_revise))
+    graph.add_node("save_outputs", _traced(node_save_outputs))
 
     # Linear flow: extract → fit → update → strategy → draft
     graph.set_entry_point("extract_jd")

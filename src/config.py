@@ -32,7 +32,12 @@ BANNED_HERO_WORDS = [
     "spearheaded", "drove transformation", "championed",
     "revolutionized", "orchestrated", "pioneered",
     "trailblazed", "masterminded",
+    # Credential inflation — self-applied labels not backed by evidence
+    "thought leader", "visionary", "innovative", "transformative",
+    "world-class", "cutting-edge", "game-changing",
+    "exceptional", "passionate", "dynamic",
 ]
+
 PREFERRED_VERBS = [
     "handled", "reviewed", "tracked", "worked with",
     "set up", "guided", "managed", "built", "designed",

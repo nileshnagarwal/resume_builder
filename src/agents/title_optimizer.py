@@ -25,24 +25,42 @@ For each role:
    different title better reflect both the work AND the JD's language?
 4. If a rewrite is warranted, provide the optimized title. If the original \
    title is already the best honest representation, keep it unchanged.
+5. REMOVAL ACCOUNTING: If the optimized title drops any word or function \
+   from the original title, you MUST explicitly state what was removed and \
+   why. Do not silently drop terms. If you cannot justify a removal with \
+   evidence from the selected bullets, keep the original term.
 
 HONESTY CONSTRAINTS:
-- You MUST NOT inflate seniority (e.g. "Manager" → "Director").
+- SENIORITY PROTECTION (both directions):
+  - You MUST NOT inflate seniority (e.g. "Coordinator" → "Director").
+  - You MUST NOT deflate seniority (e.g. "CTO" → "Developer", "VP" → "Lead").
+  - Founding credentials ("Founder", "Co-Founder", "Owner") are NEVER removed \
+    or replaced. They may be supplemented (e.g. "Founder & Growth Lead" is \
+    acceptable; "Growth Lead" alone — dropping "Founder" — is not).
+- ROLE-SCOPED TITLING: The optimized title must reflect ONLY activities \
+  documented in the master resume under THAT specific role. Do not import \
+  vocabulary from the target JD to describe past roles. If the candidate's \
+  past role involved teaching but the JD is for Training Manager, do not \
+  relabel the teaching role as "Training Manager" unless training \
+  was the specifically documented function.
+- TITLE TRANSLATION scope: "Industry translation" means mapping equivalent \
+  titles across markets (e.g. "Ward Sister" → "Charge Nurse", \
+  "Accounts Manager" → "Controller"). It does NOT mean rewriting a title to \
+  mirror the target JD. The optimized title must describe what the candidate \
+  ACTUALLY DID, not what the target job is called.
 - You MUST NOT fabricate responsibilities not supported by the selected bullets.
-- You MAY translate equivalent titles across industries/geographies \
-  (e.g. "Sales and Operations Manager" → "Logistics Account Manager" \
-  if the selected bullets genuinely reflect logistics account management).
 - The optimized title must be defensible in an interview.
 
 Return a JSON array of objects:
 [
   {
     "original_title": "Exact title from master resume",
-    "rationale": "Step-by-step reasoning for why this title should or should not change",
+    "rationale": "Step-by-step reasoning. Include REMOVAL ACCOUNTING if any term is dropped.",
     "optimized_title": "The rewritten title, or the original if no change needed"
   }
 ]
 """
+
 
 
 def _format_priority_map(priority_map: PriorityMap) -> str:

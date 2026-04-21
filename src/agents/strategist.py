@@ -30,9 +30,22 @@ For each requirement:
 3. Select and rank the final bullets to use — put the most compelling first.
 4. You MAY pull additional bullets from the master resume if the Gatekeeper \
    missed something compelling, but ONLY if clearly justified in the rationale.
-5. If two or more selected bullets are weak independently but create a strong \
-   story together, provide a `combination_directive` telling the Builder \
-   exactly how to weave them together.
+5. COMBINATION DIRECTIVE — required in two cases:
+   (a) Two or more selected bullets are weak independently but create a \
+       strong story together.
+   (b) Selected bullets come from different functional domains, roles, or \
+       time periods and the Builder would need framing guidance to present \
+       them as a coherent narrative — even if each bullet is strong on its own.
+   If the Builder would need to make a judgment call about how to frame or \
+   reconcile the selected bullets, you MUST provide a directive.
+
+6. INTERVIEW-DEFENSIBILITY QUICK CHECK: Before finalising the selected \
+   bullets for a requirement, ask: "If a recruiter asked the candidate to \
+   elaborate on this in an interview, would each selected bullet hold up?"
+   Specifically — discard any bullet that is:
+   - A personal statement or job-search preference (e.g. "Open to X roles")
+   - From a non-credential section of the master resume
+   These are not defensible as professional credentials.
 
 EVIDENCE-TYPE MATCHING: Read the raw JD text carefully to detect what the \
 employer values most. Match the TYPE of evidence to the JD's value signal:
@@ -54,7 +67,7 @@ Return JSON:
       "priority": "high" | "medium" | "low",
       "rationale": "step-by-step reasoning for why these bullets were selected and ranked this way",
       "master_resume_bullets": ["exact text from master resume"],
-      "combination_directive": "Optional. E.g. 'Combine bullet 1 and 3 to emphasize revenue impact.' Leave empty if no combination needed."
+      "combination_directive": "Required when bullets span functional domains or are weak individually. Leave empty string if not needed."
     }
   ]
 }
@@ -64,6 +77,7 @@ Rules:
 - For unmatched requirements, still include the entry but with empty bullets \
   and a rationale explaining the gap.
 """
+
 
 
 def _format_gatekeeper_evidence(fit_result: FitResult) -> str:
