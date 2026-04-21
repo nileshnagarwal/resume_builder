@@ -15,3 +15,15 @@ This document tracks ideas and experiments to test once the automated evaluation
 - Number of hallucinations or semantic drift cases.
 - Constraint adherence (e.g., sticking to explicit bullet formatting).
 - Quality score of the resulting step-by-step reasoning.
+
+## 2. Implied Environmental Context (Anti-Hallucination)
+**Hypothesis**: The Hallucination Checker gets lenient when a candidate demonstrates a skill (e.g., mentoring) that *could* apply to an environment the JD requests (e.g., startup incubators), causing the LLM to rubber-stamp the environment framing as "capable" rather than flagging it as a missing factual history claim.
+
+**Experiment Details**:
+- **Scenario**: JD demands "startup incubator" experience. Candidate has "mentored early stage founders" but no actual incubator context in their master resume.
+- **Trigger**: The Builder injects "capable of mentoring founders in startup incubators" into the summary.
+- **Criteria**: The Hallucination checker MUST flag the "startup incubator" phrase as a blocker-severity hallucination, regardless of the candidate's mentoring capability.
+
+**Metrics to Track**:
+- Does the phrase get passed as `[CLEAN]` or flagged as `[HALLUCINATION]`?
+- Does the reasoning block correctly identify that the environment itself is missing?
