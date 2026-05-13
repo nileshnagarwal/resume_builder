@@ -228,6 +228,17 @@ def node_run_critique(state: dict) -> dict:
     print(f"\n🔬 [5/8] Running critique swarm (V{state['current_draft'].version})...")
 
     tracing = state.get("_tracing_enabled", False)
+    loop_iteration = state.get("loop_count", 0)
+
+    # On loop 1+, pass prior flags and the diff log so the HC can do
+    # incremental checking instead of a full re-scan.
+    previous_flags: list | None = state.get("critique_flags") or None
+    diff_log: list | None = state.get("diff_log") or None
+    # Only use incremental mode on loop 1+ (loop_iteration > 0 at this point
+    # means we've already done at least one full pass)
+    if loop_iteration == 0:
+        previous_flags = None
+        diff_log = None
 
     if tracing:
         flags, sub_traces = run_critique_swarm(
@@ -235,7 +246,9 @@ def node_run_critique(state: dict) -> dict:
             state["master_resume_text"],
             state["requirements"],
             emit_traces=True,
-            loop_iteration=state.get("loop_count", 0),
+            loop_iteration=loop_iteration,
+            previous_flags=previous_flags,
+            diff_log=diff_log,
         )
         traces = state.get("_traces", [])
         traces.extend(sub_traces)
@@ -244,6 +257,8 @@ def node_run_critique(state: dict) -> dict:
             state["current_draft"],
             state["master_resume_text"],
             state["requirements"],
+            previous_flags=previous_flags,
+            diff_log=diff_log,
         )
 
     # Inject programmatic bullet-count violations as blocker flags

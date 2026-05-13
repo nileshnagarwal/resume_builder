@@ -1,63 +1,141 @@
 """Critique Swarm — 3 parallel mini-agents that check the resume draft."""
 
 import asyncio
+import difflib
 import json
+import re
 
 from src.config import BANNED_HERO_WORDS
 from src.llm import call_llm, call_llm_json
 from src.models import (
     CritiqueFlag,
+    DiffEntry,
     DraftResume,
     JDRequirement,
     Severity,
 )
 
 
-# --- Hallucination Checker ---
+# ---------------------------------------------------------------------------
+# Hallucination Checker — Two-Tier Architecture
+#
+# Tier 1 (deterministic): fast string similarity filter.
+#   Lines that closely match any substring of the master resume are auto-CLEAN.
+#   No LLM cost, no lazy-exit incentive.
+#
+# Tier 2 (LLM — Logical Bridge): only non-verbatim lines reach this agent.
+#   It must articulate an explicit evidence→claim transformation chain and
+#   apply an "interview-defensibility" test before marking anything CLEAN.
+#   Vague topical similarity is NOT sufficient — the logical bridge must hold.
+# ---------------------------------------------------------------------------
 
-HALLUCINATION_PROMPT = """\
-You are a hallucination detection agent. Perform a LINE-BY-LINE audit of the \
-resume draft against the master resume.
+_VERBATIM_THRESHOLD = 0.82  # SequenceMatcher ratio; tune if false-positive rate rises
+_MARKDOWN_STRIP_RE = re.compile(r"[\*\_\#\[\]\(\)`]+")
 
-Do not accept implied context. If the draft states that a task was performed under specific conditions (e.g., 'remote environments', 'distributed teams', 'agile squads', 'startup incubators'), that exact environmental context MUST exist explicitly in the master resume. You cannot infer that because they have a certain skill, they operated in that environment.
 
-For EVERY line of the resume draft, output exactly one of:
+def _normalise(text: str) -> str:
+    """Strip markdown, collapse whitespace, lowercase for comparison."""
+    text = _MARKDOWN_STRIP_RE.sub(" ", text)
+    return " ".join(text.lower().split())
 
-  <CLEAN> <Draft Phrase>
-  Reasoning: <Why it is supported>
-  Evidence: <Master resume quote>
 
-  <HALLUCINATION> <Draft Phrase>
-  Claimed: <what the draft says>
-  Master resume says: <what is actually documented>
-  Severity: blocker
+def _split_into_checkable_lines(full_text: str) -> list[str]:
+    """Return non-empty, non-header-only lines worth auditing."""
+    lines = []
+    for raw in full_text.splitlines():
+        stripped = raw.strip()
+        # Skip blank lines and pure section headers (no content after ##)
+        if not stripped or re.fullmatch(r"#+\s*", stripped):
+            continue
+        lines.append(stripped)
+    return lines
 
-Do NOT group lines. Do NOT skip lines. Do NOT write section summaries instead \
-of line-by-line output. Process top to bottom.
 
-Lines requiring extra scrutiny:
-- Any "Experienced in X" or "Expert in Y" in the Professional Summary \
-  (treat as factual claims, not framing — verify X and Y exist in master resume)
-- Any environmental or circumstantial framing (e.g. 'remote', 'fast-paced', 'executive-level')
-- Any tool, platform, or methodology named in Core Competencies or Skills \
-  (each must be traceable to documented use in master resume)
-- All numbers, percentages, and dollar figures in Experience bullets \
-  (flag if they differ even slightly from master resume)
-- Any phrase that sounds like a JD keyword but has no master resume referent \
-  (e.g. "webinar delivery", "strategic alliances", "SaaS expertise" must all \
-  have master resume evidence)
+def _is_verbatim_match(line: str, master_text: str, threshold: float = _VERBATIM_THRESHOLD) -> bool:
+    """Return True when *line* is a near-verbatim paraphrase of some passage
+    in *master_text*.
 
-After the line-by-line output, append a JSON summary:
+    Uses a sliding window of the same token-length as *line* over *master_text*
+    so that localised matches are not diluted by the full-document comparison.
+    """
+    norm_line = _normalise(line)
+    norm_master = _normalise(master_text)
+
+    if not norm_line:
+        return True  # empty / whitespace-only → nothing to hallucinate
+
+    # Quick whole-document check first (cheap)
+    if norm_line in norm_master:
+        return True
+
+    # Sliding window: compare against same-length windows of master text
+    words_line = norm_line.split()
+    words_master = norm_master.split()
+    window = len(words_line)
+
+    best = 0.0
+    for start in range(max(1, len(words_master) - window + 1)):
+        chunk = " ".join(words_master[start : start + window + 5])  # +5 slack
+        ratio = difflib.SequenceMatcher(None, norm_line, chunk).ratio()
+        if ratio > best:
+            best = ratio
+        if best >= threshold:
+            return True
+
+    return best >= threshold
+
+
+# --- Tier-2: Logical Bridge Prompt ---
+
+LOGICAL_BRIDGE_PROMPT = """\
+You are a Hallucination Auditor performing a DEEP EVIDENCE CHECK on specific \
+claims from a resume draft.
+
+For each claim provided, you MUST complete the following four steps IN ORDER. \
+Do not skip any step.
+
+STEP 1 — EVIDENCE
+Quote the most relevant passage from the master resume verbatim.
+If no relevant passage exists, write: NONE
+
+STEP 2 — TRANSFORMATION BRIDGE
+Explain, step by step, how the evidence passage logically and honestly becomes \
+the draft claim — without distortion, omission, or escalation of scope.
+- If the claim is a close paraphrase of the evidence, state: \
+"VERBATIM PARAPHRASE — no transformation needed."
+- If the claim reframes the candidate's role, identity, competency level, \
+or relationship to clients/employers in a way not derivable from the evidence, \
+state that the bridge FAILS and explain why.
+- The bridge FAILS if: the evidence describes doing X but the claim says being Y \
+(role identity drift), the evidence hedges but the claim is definitive, or the \
+evidence covers a different domain than the claim.
+
+STEP 3 — INTERVIEW DEFENSIBILITY TEST
+Ask: "Could the candidate say this specific phrasing in a recruiter interview \
+and defend it against 'What exactly do you mean by that?' using ONLY what the \
+master resume documents?"
+Answer YES or NO, with one sentence of justification.
+
+STEP 4 — VERDICT
+Mark the claim as one of:
+  <CLEAN>        — bridge holds AND interview-defensible
+  <HALLUCINATION> — bridge fails OR not interview-defensible
+
+After completing ALL claims, output a JSON summary:
 [
   {
     "severity": "blocker",
-    "location": "section and line description",
-    "issue": "what was fabricated or assumed",
-    "suggestion": "what to do about it"
+    "location": "exact section and phrase from draft",
+    "issue": "what is wrong and why the bridge failed",
+    "suggestion": "how to rewrite using only master resume content"
   }
 ]
 
-Only include hallucinations in the JSON — not clean lines. Return [] if none.
+Only include <HALLUCINATION> items in the JSON. Return [] if all claims are clean.
+
+IMPORTANT: Topical similarity is NOT sufficient for <CLEAN>. The transformation \
+bridge must be explicit and defensible. If you cannot complete Step 2 honestly, \
+the claim is a hallucination.
 """
 
 
@@ -65,18 +143,90 @@ Only include hallucinations in the JSON — not clean lines. Return [] if none.
 async def _check_hallucinations(
     draft: DraftResume,
     master_resume_text: str,
+    *,
+    previous_flags: list[CritiqueFlag] | None = None,
+    diff_log: list[DiffEntry] | None = None,
 ) -> tuple[str, list[CritiqueFlag]]:
+    """Two-tier hallucination check.
+
+    Loop 0: full resume — tier-1 verbatim filter, then tier-2 bridge LLM for
+    any non-verbatim lines.
+
+    Loop 1+: only diff lines + previously-flagged locations are re-checked,
+    skipping unchanged clean content entirely.
+    """
+    is_first_loop = not diff_log and not previous_flags
+
+    # --- Determine which lines to audit ---
+    if is_first_loop:
+        candidate_lines = _split_into_checkable_lines(draft.full_text)
+    else:
+        # Build the candidate set from diff additions + prior flag locations
+        candidate_lines: list[str] = []
+
+        if diff_log:
+            for entry in diff_log:
+                if entry.added and entry.added.strip():
+                    candidate_lines.extend(
+                        _split_into_checkable_lines(entry.added)
+                    )
+
+        if previous_flags:
+            # Re-check any line that was previously flagged — confirm the fix
+            all_draft_lines = _split_into_checkable_lines(draft.full_text)
+            flagged_locations = {
+                f.location.lower() for f in previous_flags
+                if f.agent_name == "hallucination_checker"
+            }
+            for line in all_draft_lines:
+                for loc in flagged_locations:
+                    if any(word in _normalise(line) for word in loc.split() if len(word) > 4):
+                        candidate_lines.append(line)
+                        break
+
+        # Deduplicate while preserving order
+        seen: set[str] = set()
+        unique: list[str] = []
+        for ln in candidate_lines:
+            if ln not in seen:
+                seen.add(ln)
+                unique.append(ln)
+        candidate_lines = unique
+
+    if not candidate_lines:
+        return "(no lines to check — all content verbatim or unchanged)", []
+
+    # --- Tier 1: deterministic verbatim filter ---
+    non_verbatim = [
+        line for line in candidate_lines
+        if not _is_verbatim_match(line, master_resume_text)
+    ]
+
+    tier1_note = (
+        f"Tier-1 filter: {len(candidate_lines)} lines checked, "
+        f"{len(candidate_lines) - len(non_verbatim)} auto-CLEAN (verbatim), "
+        f"{len(non_verbatim)} forwarded to Logical Bridge LLM."
+    )
+
+    if not non_verbatim:
+        return tier1_note, []
+
+    # --- Tier 2: Logical Bridge LLM ---
+    claims_block = "\n".join(
+        f"{i+1}. {line}" for i, line in enumerate(non_verbatim)
+    )
     user_prompt = (
-        f"## Resume Draft\n{draft.full_text}\n\n"
+        f"## Claims to Audit ({len(non_verbatim)} non-verbatim lines)\n"
+        f"{claims_block}\n\n"
         f"## Master Resume\n{master_resume_text}"
     )
-    # Response is line-by-line audit + JSON array; extract just the JSON
     raw = call_llm(
-        system_prompt=HALLUCINATION_PROMPT,
+        system_prompt=LOGICAL_BRIDGE_PROMPT,
         user_prompt=user_prompt,
     )
     json_text = _extract_json_from_response(raw)
-    return raw, _parse_flags(json_text, "hallucination_checker")
+    scratchpad = f"{tier1_note}\n\n{raw}"
+    return scratchpad, _parse_flags(json_text, "hallucination_checker")
 
 
 
@@ -253,16 +403,25 @@ def run_critique_swarm(
     *,
     emit_traces: bool = False,
     loop_iteration: int = 0,
+    previous_flags: list[CritiqueFlag] | None = None,
+    diff_log: list[DiffEntry] | None = None,
 ) -> list[CritiqueFlag] | tuple[list[CritiqueFlag], list]:
     """Run all 3 critique agents in parallel and return combined flags.
 
     When ``emit_traces=True``, returns a (flags, sub_traces) tuple where
     sub_traces is a list of AgentTrace objects — one per sub-agent.
+
+    ``previous_flags`` and ``diff_log`` enable incremental HC checking on
+    loop 1+: only diff lines and previously-flagged locations are re-audited.
     """
     return asyncio.run(
-        _run_swarm_async(draft, master_resume_text, requirements,
-                         emit_traces=emit_traces,
-                         loop_iteration=loop_iteration)
+        _run_swarm_async(
+            draft, master_resume_text, requirements,
+            emit_traces=emit_traces,
+            loop_iteration=loop_iteration,
+            previous_flags=previous_flags,
+            diff_log=diff_log,
+        )
     )
 
 
@@ -273,12 +432,21 @@ async def _run_swarm_async(
     *,
     emit_traces: bool = False,
     loop_iteration: int = 0,
+    previous_flags: list[CritiqueFlag] | None = None,
+    diff_log: list[DiffEntry] | None = None,
 ) -> list[CritiqueFlag] | tuple[list[CritiqueFlag], list]:
     """Run all 3 critique checks concurrently."""
     import time as _time
 
     sub_agents = [
-        ("hallucination_checker", _check_hallucinations(draft, master_resume_text)),
+        (
+            "hallucination_checker",
+            _check_hallucinations(
+                draft, master_resume_text,
+                previous_flags=previous_flags,
+                diff_log=diff_log,
+            ),
+        ),
         ("tone_language_cop", _check_tone(draft)),
         ("ats_keyword_scanner", _check_ats_keywords(draft, requirements, master_resume_text)),
     ]

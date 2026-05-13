@@ -51,21 +51,12 @@ def summarise_old_flags(trace: dict) -> list[str]:
 
 async def replay_loop(loop_iteration: int, draft_text: str, master_resume: str):
     """Run the updated hallucination checker on a single draft."""
-    from src.llm import call_llm
-    from src.agents.critique_swarm import HALLUCINATION_PROMPT, _extract_json_from_response, _parse_flags
-
     draft = DraftResume(
         full_text=draft_text,
         version=loop_iteration + 1,
         sections=[],
     )
-    user_prompt = (
-        f"## Resume Draft\n{draft.full_text}\n\n"
-        f"## Master Resume\n{master_resume}"
-    )
-    raw = call_llm(system_prompt=HALLUCINATION_PROMPT, user_prompt=user_prompt)
-    json_text = _extract_json_from_response(raw)
-    flags = _parse_flags(json_text, "hallucination_checker")
+    raw, flags = await _check_hallucinations(draft, master_resume)
     return raw, flags
 
 
