@@ -1,13 +1,24 @@
-"""LLM utility — shared function for calling the Gemini API."""
+"""LLM utility — shared function for calling the Nvidia API."""
 
-from google import genai
+import re
 
-from src.config import GEMINI_API_KEY, MODEL_NAME
+import openai
+import httpx
+
+from src.config import DEEPINFRA_API_KEY, MODEL_NAME
+
+# Deepseek thinking models prepend a <think>...</think> block to responses.
+# Strip it so downstream parsers receive only the actual content.
+_THINK_TAG_RE = re.compile(r"<think>.*?</think>\s*", re.DOTALL)
 
 
-def get_client() -> genai.Client:
-    """Return a configured Gemini client."""
-    return genai.Client(api_key=GEMINI_API_KEY)
+def get_client() -> openai.Client:
+    """Return a configured OpenAI client for DeepInfra API."""
+    return openai.Client(
+        api_key=DEEPINFRA_API_KEY,
+        base_url="https://api.deepinfra.com/v1/openai",
+        timeout=httpx.Timeout(600.0, connect=10.0),
+    )
 
 
 import time
@@ -42,24 +53,29 @@ def call_llm(
     user_prompt: str,
     temperature: float = 0.3,
 ) -> str:
-    """Call the Gemini API and return the text response.
+    """Call the Nvidia API and return the text response.
 
     Raises ValueError if the response is empty.
     """
     client = get_client()
 
     def _do_call():
-        response = client.models.generate_content(
+        response = client.chat.completions.create(
             model=MODEL_NAME,
-            contents=user_prompt,
-            config=genai.types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                temperature=temperature,
-            ),
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=temperature,
+            max_tokens=16384,
+            # Deepseek-specific: enable thinking mode.
+            # Remove extra_body if switching to a non-Deepseek model.
+            extra_body={"chat_template_kwargs": {"thinking": True, "reasoning_effort": "high"}},
         )
-        if not response.text:
+        content = response.choices[0].message.content
+        if not content:
             raise ValueError("LLM returned an empty response")
-        return response.text.strip()
+        return _THINK_TAG_RE.sub("", content).strip()
 
     return _execute_with_retries(_do_call)
 
@@ -69,24 +85,38 @@ def call_llm_json(
     user_prompt: str,
     temperature: float = 0.2,
 ) -> str:
-    """Call the Gemini API requesting JSON output.
+    """Call the Nvidia API requesting JSON output.
 
     Returns raw JSON string. Caller is responsible for parsing.
+
+    Note: We intentionally omit response_format={"type": "json_object"}
+    because Deepseek thinking mode is incompatible with it (the model
+    echoes the format spec instead of generating content). JSON output
+    is enforced via the system prompt instead.
     """
     client = get_client()
 
     def _do_call():
-        response = client.models.generate_content(
+        response = client.chat.completions.create(
             model=MODEL_NAME,
-            contents=user_prompt,
-            config=genai.types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                temperature=temperature,
-                response_mime_type="application/json",
-            ),
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=temperature,
+            max_tokens=16384,
+            # Deepseek-specific: enable thinking mode.
+            # Remove extra_body if switching to a non-Deepseek model.
+            extra_body={"chat_template_kwargs": {"thinking": True, "reasoning_effort": "high"}},
         )
-        if not response.text:
+        content = response.choices[0].message.content
+        if not content:
             raise ValueError("LLM returned an empty JSON response")
-        return response.text.strip()
+        content = _THINK_TAG_RE.sub("", content).strip()
+        # Strip markdown code fences if the model wraps JSON in ```json ... ```
+        if content.startswith("```"):
+            content = re.sub(r"^```(?:json)?\s*\n?", "", content)
+            content = re.sub(r"\n?```\s*$", "", content)
+        return content.strip()
 
     return _execute_with_retries(_do_call)

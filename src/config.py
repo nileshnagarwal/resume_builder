@@ -12,8 +12,8 @@ CHROMA_DB_DIR = PROJECT_ROOT / "data" / "chroma_db"
 PROMPTS_DIR = PROJECT_ROOT  # Builder/Critique instruction files live at root
 
 # --- LLM Configuration ---
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-MODEL_NAME = "gemini-3.1-flash-lite-preview"
+DEEPINFRA_API_KEY = os.environ.get("DEEPINFRA_API_KEY", "")
+MODEL_NAME = "deepseek-ai/DeepSeek-V4-Flash"
 
 # --- Pipeline Settings ---
 MAX_REVISION_LOOPS = 3
