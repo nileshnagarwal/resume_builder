@@ -107,12 +107,13 @@ Sweep for:
 
 ## Output Format
 
-Return a single JSON array of findings. Each finding must use this schema:
+Return a single JSON array of findings. Each finding must use this schema and evaluate **each specific run (loop iteration)** of an agent:
 
 ```json
 [
   {
     "agent_name": "Builder",
+    "loop_iteration": 1,
     "error_code": "BL-001",
     "dimension": "Metric Fidelity",
     "score": 2,
@@ -124,6 +125,7 @@ Return a single JSON array of findings. Each finding must use this schema:
   },
   {
     "agent_name": "Hallucination Checker",
+    "loop_iteration": 1,
     "error_code": "CR-001",
     "dimension": "Hallucination Recall",
     "score": 2,
@@ -140,9 +142,10 @@ Return a single JSON array of findings. Each finding must use this schema:
 
 ### Rules
 
-1. **Every finding must have an error_code.** No vague observations.
-2. **Every claim must cite evidence.** Quote the specific resume text AND the master resume text.
-3. **Do not re-score dimensions already in `06_deterministic_scores.json`** (Bullet Counts, Tone Compliance Deterministic, Surface Match, Semantic Fact-Checking, Metric Fidelity). Focus on what deterministic checks cannot: reasoning quality, strategic relevance, and semantic accuracy.
+1. **Evaluate Per-Loop Iteration:** For agents that run multiple times (Builder, Hallucination Checker, Tone Cop, ATS Scanner, Chief Critique, Reviser), you MUST evaluate each loop separately. If the Builder runs 3 times, you must output at least 3 findings for the Builder (one for `loop_iteration: 1`, `loop_iteration: 2`, etc.). For pre-loop agents (JD Extractor, Gatekeeper, Strategist, Title Optimizer), use `"loop_iteration": 0`.
+2. **Every finding must have an error_code.** No vague observations.
+3. **Every claim must cite evidence.** Quote the specific resume text AND the master resume text.
+4. **Do not re-score dimensions already in `06_deterministic_scores.json`** (Bullet Counts, Tone Compliance Deterministic, Surface Match, Semantic Fact-Checking, Metric Fidelity). Focus on what deterministic checks cannot: reasoning quality, strategic relevance, and semantic accuracy.
 4. **Use only whole-number scores on a 1–5 scale.** No floats like 3.5. The definitions below are exhaustive — if your evidence maps to a 3, score 3.
 5. **If you find no issues for an agent, still emit a finding** with score 5.0 and notes = "No issues found."
 
